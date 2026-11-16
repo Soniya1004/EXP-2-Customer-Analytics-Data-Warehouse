@@ -1,0 +1,101 @@
+    print(df.head())
+
+    # Check dataset information
+    print("\nDataset Shape:", df.shape)
+    print("\nDataset Information:")
+    df.info()
+
+    # Check missing values
+    print("\nMissing Values:")
+    print(df.isnull().sum())
+
+    # Handle missing numerical values using mean
+    numerical_columns = df.select_dtypes(include=np.number).columns
+    for column in numerical_columns:
+        if df[column].isnull().any():
+            df[column] = df[column].fillna(df[column].mean())
+
+    # Handle missing categorical values using mode
+    categorical_columns = df.select_dtypes(include="object").columns
+    for column in categorical_columns:
+        if df[column].isnull().any():
+            modes = df[column].mode(dropna=True)
+            if not modes.empty:
+                df[column] = df[column].fillna(modes.iloc[0])
+
+    # Check and remove duplicate records
+    print("\nDuplicate Records:", df.duplicated().sum())
+    df = df.drop_duplicates().copy()
+
+    # Remove unnecessary identifier columns
+    df = df.drop(columns=["RowNumber", "CustomerId", "Surname"], errors="ignore")
+
+    # Validate the target column expected by this experiment
+    if "Exited" not in df.columns:
+        raise KeyError(
+            "The dataset must contain the 'Exited' target column. "
+            "Please use the Bank Customer Churn dataset."
+        )
+
+    # Separate features and target
+    X = df.drop(columns=["Exited"])
+    y = df["Exited"].copy()
+
+    # Encode categorical columns using One-Hot Encoding
+    categorical_to_encode = [
+        column for column in ["Geography", "Gender"] if column in X.columns
+    ]
+    if categorical_to_encode:
+        X = pd.get_dummies(
+            X,
+            columns=categorical_to_encode,
+            drop_first=True,
+            dtype=int,
+        )
+
+    # Scale numerical features using StandardScaler
+    numerical_features = X.select_dtypes(include=np.number).columns
+    scaler = StandardScaler()
+    if len(numerical_features) > 0:
+        X.loc[:, numerical_features] = scaler.fit_transform(X[numerical_features])
+
+    # Create final preprocessed dataset
+    final_df = X.copy()
+    final_df["Exited"] = y.values
+
+    # Verify final dataset
+    print("\nFinal Preprocessed Dataset:")
+    print(final_df.head())
+    print("\nFinal Shape:", final_df.shape)
+    print("Missing Values:", int(final_df.isnull().sum().sum()))
+    print("Duplicate Records:", int(final_df.duplicated().sum()))
+
+    # Save the preprocessed dataset
+    output_file.parent.mkdir(parents=True, exist_ok=True)
+    final_df.to_csv(output_file, index=False)
+    print(f"\nPreprocessed dataset saved to: {output_file.resolve()}")
+    return final_df
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser(
+        description="Preprocess the Bank Customer Churn dataset for Customer Analytics."
+    )
+    parser.add_argument(
+        "input_csv",
+        nargs="?",
+        default="Churn_Modelling.csv",
+        help="Path to the source CSV file (default: Churn_Modelling.csv)",
+    )
+    parser.add_argument(
+        "-o",
+        "--output",
+        default="preprocessed_customer_data.csv",
+        help="Output CSV path (default: preprocessed_customer_data.csv)",
+    )
+    args = parser.parse_args()
+    preprocess_dataset(Path(args.input_csv), Path(args.output))
+
+
+if __name__ == "__main__":
+    main()
